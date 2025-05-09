@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Redirecting to app...</title>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Получаем все параметры из URL
+            const params = new URLSearchParams(window.location.search);
+            
+            // Строим URL-схему вашего приложения
+            let appUrl = 'io.supabase.pointo://reset-callback/';
+            
+            // Добавляем все параметры к URL приложения
+            if (params.toString()) {
+                appUrl += '?' + params.toString();
+            }
+            
+            // Добавляем ссылку для ручного нажатия
+            document.getElementById('manual-link').href = appUrl;
+            document.getElementById('manual-link').textContent = 'Open in app';
+            
+            // Попытка автоматического перенаправления
+            setTimeout(function() {
+                window.location.href = appUrl;
+            }, 500);
+        });
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 50px 20px;
+        }
+        
+        h1 {
+            margin-bottom: 20px;
+        }
+        
+        a {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Redirecting to app...</h1>
+    <p>If you are not redirected automatically, please click the button below:</p>
+    <a id="manual-link" href="#">Loading...</a>
+</body>
+</html>
