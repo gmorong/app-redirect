@@ -4,31 +4,54 @@
     <meta charset="UTF-8">
     <title>Redirecting to app...</title>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Получаем все параметры из URL
-            const params = new URLSearchParams(window.location.search);
-            
-            // Строим URL для приложения с сохранением всех параметров
-            let appUrl = 'io.supabase.pointo://reset-callback/';
-            
-            // Добавляем все параметры к URL
-            if (params.toString()) {
-                appUrl += '?' + params.toString();
+document.addEventListener('DOMContentLoaded', function() {
+    // Получаем параметры из URL
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    let email = params.get('email');
+    
+    // Если email отсутствует, пробуем извлечь его из токена (если это JWT)
+    if (!email && token && token.includes('.')) {
+        try {
+            const parts = token.split('.');
+            if (parts.length > 1) {
+                const payload = parts[1];
+                const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+                
+                const parsed = JSON.parse(jsonPayload);
+                email = parsed.email || parsed.sub;
+                
+                if (email) {
+                    console.log("Extracted email from token: " + email);
+                    params.set('email', email);
+                }
             }
-            
-            // Логируем для отладки
-            console.log("Original URL params:", window.location.search);
-            console.log("App URL:", appUrl);
-            
-            // Обновляем ссылку
-            document.getElementById('app-link').href = appUrl;
-            
-            // Перенаправляем на приложение
-            setTimeout(function() {
-                window.location.href = appUrl;
-            }, 500);
-        });
-    </script>
+        } catch (e) {
+            console.error("Error parsing token:", e);
+        }
+    }
+    
+    // Строим URL для приложения
+    let appUrl = 'io.supabase.pointo://reset-callback/';
+    if (params.toString()) {
+        appUrl += '?' + params.toString();
+    }
+    
+    // Выводим отладочную информацию
+    console.log("App URL:", appUrl);
+    
+    // Обновляем ссылку
+    document.getElementById('app-link').href = appUrl;
+    
+    // Перенаправляем через 1.5 секунды
+    setTimeout(function() {
+        window.location.href = appUrl;
+    }, 1500);
+});
+</script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
