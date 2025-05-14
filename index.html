@@ -2,75 +2,216 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Redirecting to app...</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redirecting to PoinTo app...</title>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        // Функция создания URL для приложения
+        function createAppUrl(params) {
+            // Используем URL-схему из Supabase
+            const appScheme = 'io.supabase.pointo';
+            const appPath = 'reset-callback';
+            let appUrl = `${appScheme}://${appPath}/`;
+            
+            if (params && params.toString()) {
+                appUrl += '?' + params.toString();
+            }
+            
+            return appUrl;
+        }
+        
+        // Функция для извлечения email из JWT токена
+        function extractEmailFromToken(token) {
             try {
-                // Получаем параметры из URL
-                const params = new URLSearchParams(window.location.search);
-                let token = params.get('token');
-                let email = params.get('email');
-                let type = params.get('type') || 'recovery';
+                if (!token || !token.includes('.')) return null;
                 
-                // Если email отсутствует, пытаемся извлечь его из токена
-                if (!email && token && token.includes('.')) {
+                // Разбиваем JWT на части
+                const parts = token.split('.');
+                if (parts.length < 2) return null;
+                
+                // Декодируем payload часть
+                let payload = parts[1];
+                // Заменяем специальные символы для корректного base64
+                payload = payload.replace(/-/g, '+').replace(/_/g, '/');
+                // Добавляем отступ если необходимо
+                while (payload.length % 4) {
+                    payload += '=';
+                }
+                
+                // Декодируем base64
+                const decodedPayload = atob(payload);
+                const jsonData = JSON.parse(decodedPayload);
+                
+                // Ищем email в различных полях токена
+                return jsonData.email || jsonData.sub || 
+                       (jsonData.user && jsonData.user.email) || 
+                       null;
+            } catch (e) {
+                console.error("Error extracting email from token:", e);
+                return null;
+            }
+        }
+        
+        // Функция для отображения отладочной информации
+        function showDebugInfo(params, appUrl) {
+            const debugInfo = document.getElementById('debug-info');
+            const debugToggle = document.getElementById('debug-toggle');
+            
+            if (debugInfo && debugToggle) {
+                // Формируем отладочный текст
+                let debugText = '<h3>Debug Information:</h3>';
+                debugText += '<pre class="debug-pre">';
+                debugText += 'URL params: ' + JSON.stringify(Object.fromEntries(params), null, 2) + '\n\n';
+                debugText += 'App redirect URL: ' + appUrl + '\n\n';
+                
+                // Добавляем информацию о фрагменте URL
+                if (window.location.hash) {
+                    debugText += 'URL Fragment: ' + window.location.hash + '\n\n';
+                    
                     try {
-                        // Разбиваем JWT на части
-                        const parts = token.split('.');
-                        if (parts.length >= 2) {
-                            // Декодируем payload часть
-                            let payload = parts[1];
-                            // Заменяем специальные символы для корректного base64
-                            payload = payload.replace(/-/g, '+').replace(/_/g, '/');
-                            // Добавляем отступ если необходимо
-                            while (payload.length % 4) {
-                                payload += '=';
-                            }
-                            
-                            // Декодируем base64
-                            const decodedPayload = atob(payload);
-                            const jsonData = JSON.parse(decodedPayload);
-                            
-                            // Ищем email в различных полях токена
-                            email = jsonData.email || jsonData.sub || jsonData.user?.email;
-                            
-                            if (email) {
-                                // Добавляем email к параметрам
-                                params.set('email', email);
-                            }
+                        const fragmentParams = new URLSearchParams(window.location.hash.substring(1));
+                        if (fragmentParams.toString()) {
+                            debugText += 'Fragment params: ' + JSON.stringify(Object.fromEntries(fragmentParams), null, 2) + '\n\n';
                         }
                     } catch (e) {
-                        console.error("Error extracting email:", e);
+                        debugText += 'Error parsing fragment: ' + e.message + '\n\n';
+                    }
+                }
+                
+                // Проверяем наличие токена и добавляем информацию о нем
+                const token = params.get('token') || params.get('access_token');
+                if (token) {
+                    debugText += 'Token (first 15 chars): ' + token.substring(0, 15) + '...\n\n';
+                    
+                    // Проверяем возможность распарсить токен
+                    const email = extractEmailFromToken(token);
+                    if (email) {
+                        debugText += 'Email extracted from token: ' + email + '\n\n';
+                    } else {
+                        debugText += 'No email could be extracted from token\n\n';
+                    }
+                }
+                
+                debugText += '</pre>';
+                
+                // Устанавливаем содержимое
+                debugInfo.innerHTML = debugText;
+                
+                // Показываем кнопку переключения
+                debugToggle.style.display = 'block';
+            }
+        }
+        
+        // Основная функция редиректа
+        function redirectToApp() {
+            try {
+                // Получаем все параметры из URL
+                const params = new URLSearchParams(window.location.search);
+                
+                // Проверяем наличие параметров в hash (фрагменте URL)
+                // Это важно для OAuth-потоков, которые передают токен через фрагмент
+                if (window.location.hash && window.location.hash.length > 1) {
+                    // Удаляем символ # в начале
+                    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+                    
+                    // Добавляем параметры из hash в основные параметры
+                    for (const [key, value] of hashParams.entries()) {
+                        // Приоритет отдается параметрам из hash
+                        params.set(key, value);
+                    }
+                }
+                
+                // Получаем токен и email из параметров
+                let token = params.get('token') || params.get('access_token');
+                let email = params.get('email') || params.get('user_email');
+                let type = params.get('type') || 'recovery';
+                
+                // Логируем для отладки
+                console.log("Extracted token:", token ? `${token.substring(0, 10)}...` : "none");
+                console.log("Extracted email:", email);
+                
+                // Если email отсутствует, пытаемся извлечь его из токена
+                if (!email && token) {
+                    const extractedEmail = extractEmailFromToken(token);
+                    if (extractedEmail) {
+                        email = extractedEmail;
+                        params.set('email', email);
+                        console.log("Email extracted from token:", email);
                     }
                 }
                 
                 // Убедимся, что type установлен
                 if (!params.has('type')) {
-                    params.set('type', 'recovery');
+                    params.set('type', type);
                 }
                 
                 // Создаем URL для приложения
-                let appUrl = 'io.supabase.pointo://reset-callback/';
-                if (params.toString()) {
-                    appUrl += '?' + params.toString();
+                const appUrl = createAppUrl(params);
+                console.log("App URL:", appUrl);
+                
+                // Обновляем ссылку на кнопке
+                const appLink = document.getElementById('app-link');
+                if (appLink) {
+                    appLink.href = appUrl;
+                    appLink.textContent = 'Открыть PoinTo';
+                }
+                
+                // Показываем отладочную информацию
+                showDebugInfo(params, appUrl);
+                
+                // Перенаправляем на приложение после небольшой задержки
+                // Задержка позволяет пользователю увидеть информацию на странице
+                setTimeout(function() {
+                    console.log("Redirecting to app...");
+                    window.location.href = appUrl;
+                }, 1000);
+                
+                // Обновляем статус
+                const statusElement = document.getElementById('status-message');
+                if (statusElement) {
+                    statusElement.textContent = 'Перенаправление в приложение...';
+                }
+                
+            } catch (e) {
+                console.error("Error in redirect process:", e);
+                
+                // В случае ошибки все равно пытаемся перенаправить с исходными параметрами
+                const appUrl = createAppUrl(new URLSearchParams(window.location.search));
+                
+                // Обновляем статус и отображаем ошибку
+                const statusElement = document.getElementById('status-message');
+                if (statusElement) {
+                    statusElement.textContent = 'Произошла ошибка, но мы всё равно попытаемся перенаправить вас в приложение.';
+                    statusElement.classList.add('error');
                 }
                 
                 // Обновляем ссылку
                 const appLink = document.getElementById('app-link');
-                appLink.href = appUrl;
+                if (appLink) {
+                    appLink.href = appUrl;
+                }
                 
-                // Перенаправляем на приложение почти сразу
+                // Всё равно пытаемся перенаправить
                 setTimeout(function() {
                     window.location.href = appUrl;
-                }, 800);
-                
-            } catch (e) {
-                console.error("Error:", e);
-                // В случае ошибки все равно пытаемся перенаправить, но с исходными параметрами
-                const appUrl = 'io.supabase.pointo://reset-callback/' + window.location.search;
-                window.location.href = appUrl;
+                }, 2000);
             }
-        });
+        }
+        
+        // Функция для переключения отображения отладочной информации
+        function toggleDebugInfo() {
+            const debugInfo = document.getElementById('debug-info');
+            
+            if (debugInfo) {
+                if (debugInfo.style.display === 'none' || !debugInfo.style.display) {
+                    debugInfo.style.display = 'block';
+                } else {
+                    debugInfo.style.display = 'none';
+                }
+            }
+        }
+        
+        // Запускаем редирект после загрузки страницы
+        document.addEventListener('DOMContentLoaded', redirectToApp);
     </script>
     <style>
         body {
@@ -86,7 +227,8 @@
         }
         
         .container {
-            max-width: 400px;
+            max-width: 480px;
+            width: 90%;
             padding: 40px;
             background-color: white;
             border-radius: 12px;
@@ -143,18 +285,72 @@
             height: 64px;
             margin-bottom: 16px;
         }
+        
+        .error {
+            color: #e74c3c;
+        }
+        
+        .debug-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px dashed #ddd;
+            text-align: left;
+        }
+        
+        .debug-toggle {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            color: #666;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: none;
+            margin: 20px auto 0;
+        }
+        
+        .debug-pre {
+            background-color: #f8f9fa;
+            padding: 16px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        #debug-info {
+            display: none;
+            margin-top: 20px;
+        }
+        
+        /* Темная тема для отладочного блока */
+        @media (prefers-color-scheme: dark) {
+            .debug-pre {
+                background-color: #2d2d2d;
+                color: #f0f0f0;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Если у вас есть логотип приложения, добавьте его здесь -->
-        <!-- <img src="app-icon.png" alt="App Logo" class="app-icon"> -->
+        <!-- Можно добавить логотип приложения -->
+        <!-- <img src="app-icon.png" alt="PoinTo Logo" class="app-icon"> -->
         
-        <h1>Переход в приложение</h1>
+        <h1>Переход в приложение PoinTo</h1>
         <div class="spinner"></div>
-        <p>Пожалуйста, подождите, происходит переход в приложение...</p>
+        <p id="status-message">Подготовка перехода в приложение...</p>
         <p>Если автоматический переход не произошел, нажмите кнопку ниже:</p>
-        <a id="app-link" href="#" class="app-button">Открыть приложение</a>
+        <a id="app-link" href="#" class="app-button">Открыть PoinTo</a>
+        
+        <!-- Блок для отладочной информации -->
+        <div class="debug-section">
+            <button id="debug-toggle" class="debug-toggle" onclick="toggleDebugInfo()">Показать техническую информацию</button>
+            <div id="debug-info"></div>
+        </div>
     </div>
 </body>
 </html>
